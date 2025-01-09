@@ -1,6 +1,7 @@
 #include "main.h"
 #include "lemlib/api.hpp" // IWYU pragma: keep
 #include "lemlib/chassis/chassis.hpp"
+#include "lemlib/chassis/trackingWheel.hpp"
 #include "liblvgl/llemu.hpp"
 #include "pros/abstract_motor.hpp"
 #include "pros/adi.hpp"
@@ -11,29 +12,29 @@
 #include "pros/rotation.hpp"
 #include "pros/rtos.hpp"
 #include <cstdio>
-#include "robodash/api.h"
-#include "robodash/views/console.hpp"
 
-pros::MotorGroup left_motor_group({-1, 17, -16}); // left motors on ports 1 (reversed), 2 (forwards), and 3 (reversed)
-pros::MotorGroup right_motor_group({3, -12, 14}); // right motors on ports 4 (forwards), 5 (reversed), and 6 (forwards)
-pros::Motor ladybrown(-20);
-pros::MotorGroup intake({21, 10});
-pros::adi::DigitalOut clamp('A');
-pros::adi::DigitalOut doinker('C');
+
+pros::MotorGroup left_motor_group({-2, -3, -4}); // left motors on ports 1 (reversed), 2 (forwards), and 3 (reversed)
+pros::MotorGroup right_motor_group({16, 15, 14}); // right motors on ports 4 (forwards), 5 (reversed), and 6 (forwards)
+pros::Motor ladybrown(11);
+pros::MotorGroup intake({-20, 10});
+pros::adi::DigitalOut clamp('E');
+pros::adi::DigitalOut ringrush('C');
 pros::adi::DigitalOut pistonLift('B');
-pros::Imu imu(11);
+pros::Imu imu(17);
 // horizontal tracking wheel encoder. Rotation sensor, port 20, not reversedx
-pros::Rotation horizontalEnc(-7);
+pros::Rotation horizontalEnc(13);
 // vertical tracking wheel encoder. Rotation sensor, port 11, reversed
-pros::Rotation verticalEnc(13);
-pros::Rotation wallrotational(5);
+pros::Rotation verticalEnc(-18);
+pros::Rotation wallrotational(19);
 // horizontal tracking wheel
 //lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, lemlib::Omniwheel::NEW_2, -0.5);
 // vertical tracking wheel
-lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, lemlib::Omniwheel::NEW_2, 2);
-lemlib::TrackingWheel vertical_tracking_wheel(&verticalEnc, lemlib::Omniwheel::NEW_2, 0);
+lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, lemlib::Omniwheel::NEW_275, 1.8);
+lemlib::TrackingWheel vertical_tracking_wheel(&verticalEnc, lemlib::Omniwheel::NEW_275, -1.5);
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
-
+pros::Optical color(1);
+pros::Distance launch(12);
 bool clampbool = LOW;
 bool pistonliftbool = LOW;
 bool doink = LOW;
@@ -46,9 +47,9 @@ bool idk = false;
 lemlib::Drivetrain drivetrain(&left_motor_group, // left motor group
                               &right_motor_group, // right motor group
                               11.3125, // 10 inch track width
-                              lemlib::Omniwheel::NEW_325, // using new 4" omnis
+                              lemlib::Omniwheel::NEW_325, // using new 3.25" omnis
                               480, // drivetrain rpm is 360
-                              0 // horizontal drift is 2. If we had traction wheels, it would have been 8
+                              0 // horizontal drift is 0. If we had traction wheels, it would have been 8
 );
 
 lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel 1, set to null
@@ -58,15 +59,15 @@ lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
                             &imu // inertial sensor
 );
 
-lemlib::ControllerSettings lateral_controller(6.9, // proportional gain (kP)
-                                              0.02, // integral gain (kI)
-                                              8, // derivative gain (kD)
+lemlib::ControllerSettings lateral_controller(5.45, // proportional gain (kP) 6.9
+                                              0.05, // integral gain (kI) 0.02
+                                              20, // derivative gain (kD) 8
                                               3, // anti windup
                                               1, // small error range, in inches
-                                              700, // small error range timeout, in milliseconds
+                                              1400, // small error range timeout, in milliseconds
                                               5, // large error range, in inches
                                               700, // large error range timeout, in milliseconds
-                                              60 // maximum acceleration (slew
+                                              30 // maximum acceleration (slew
 );
 
 // angular PID controller
@@ -101,8 +102,10 @@ lemlib::Chassis chassis(drivetrain, // drivetrain settings
                         &throttle_curve, 
                         &steer_curve
 );
+
 bool arm_moving = false;
 int setpos = wallrotational.get_position();
+
 void arm_move_load(){ //macro to load disk
     arm_moving = true;
     while(arm_moving){
@@ -119,27 +122,43 @@ void arm_move_load(){ //macro to load disk
     ladybrown.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
     ladybrown.move(0); 
 }
-
-void arm_move_set(){ //macro to score
-    while(wallrotational.get_position()>2500){
-        ladybrown.move(70);
-        pros::delay(5);
+/*void color_sort(){
+    while(launch.get()>100){
+        intake.move(-127);
+        
     }
-    ladybrown.move(0);
-}
+    while(launch.get()<100){
+        pros::delay(2000);
+        intake.move(127);
+        pros::delay(1000);
+        
 
-void arm_move_return(){ //macro to come back down
-    while(wallrotational.get_position()<18300){
-        ladybrown.move(-70);
-        pros::delay(5);
     }
-    ladybrown.move(0);
+    
+    
+}
+*/
+const int numstates = 4;
+int states[numstates] = {0, 14, 29, 145};
+int currstate = 0;
+int target = 0;
+
+void nextState(){ //macro to score
+    currstate += 1;
+    if(currstate == 4){
+        currstate = 0;
+    }
+    target = states[currstate];
 }
 
-void armdown(){ //moves lady brown downwards
-    ladybrown.move(-127);
-
+void liftControl(){
+    double kp = 2.5;
+    double error = target - (wallrotational.get_position()/100.0);
+    double velocity = kp*error;
+    ladybrown.move(velocity);
 }
+
+
 
 
 /**
@@ -161,6 +180,12 @@ void initialize() {
     pros::lcd::initialize(); // initialize brain screen
     chassis.calibrate(); // calibrate sensors
     ladybrown.set_brake_mode(pros::MotorBrake::hold);
+    pros::Task liftControlTask([]{
+        while(true) {
+            liftControl();
+            pros::delay(10);
+        }
+    });
 }
 
 /**
@@ -193,7 +218,7 @@ void competition_initialize() {}
  * from where it left off.
  */ 
 
-int current_auton_selection =7;
+int current_auton_selection =8;
 void autonomous() { 
     switch(current_auton_selection){
         case 0: //redneg
@@ -232,46 +257,7 @@ void autonomous() {
             pros::delay(1000);
             chassis.moveToPoint(0, -14, 1700, {.forwards = false}); //p1
             chassis.waitUntilDone();
-            //chassis.moveToPoint(0, -18, 2000, {.forwards=false}); //p1
 
-
-
-
-
-
-            // chassis.setPose(0, 0, 0);
-            // chassis.moveToPoint(0, -28, 2000, {.forwards=false}); //p1
-            // chassis.turnToHeading(-333, 300);
-            // chassis.moveToPoint(-7.8, -44, 1000, {.forwards=false}); //p2
-            // chassis.waitUntilDone();
-            // clamp.set_value(true);
-            // pros::delay(100);
-            // intake.move(-127);
-            // pros::delay(200);
-            // chassis.moveToPoint(-20, -27, 1000, {.forwards=true, .maxSpeed = 80}); //p3
-            // chassis.waitUntilDone();
-            // pros::delay(700);
-            // clamp.set_value(false);
-            // intake.move(127);
-            // chassis.moveToPoint(-44.612, -35.767, 1500, {.forwards=false}); //p4
-            // chassis.waitUntilDone();
-            // clamp.set_value(true);
-            // pros::delay(100);
-            // pistonLift.set_value(true);
-            // intake.move(-127);
-            // chassis.moveToPoint(-75, -10, 1800, {.forwards=true, .maxSpeed=70});
-            // chassis.waitUntilDone();
-            // pistonLift.set_value(false);
-            // intake.move(-127);
-            // pros::delay(250);
-            // chassis.turnToHeading(-30, 500);
-            // chassis.moveToPoint(-60, -8.25, 1500, {.forwards=false, .maxSpeed = 60});
-            // pros::delay(500);
-            // intake.move(-127);
-            // chassis.moveToPoint(-65.581, -27.499, 1500, {.forwards=true, .maxSpeed = 70});
-            // intake.move(127);
-            // pros::delay(75);
-            // intake.move(-127);
             break;
         case 1: //blueneg
             chassis.setPose(0, 0, 0);
@@ -293,12 +279,6 @@ void autonomous() {
             chassis.moveToPoint(0, 13, 1000); //p1
             pros::delay(250);
             chassis.moveToPoint(14, 0, 1500, {.forwards = false}); //p1
-            // chassis.turnToHeading(-270, 750);
-            // chassis.waitUntilDone();
-            // chassis.setPose(0, 0, 0);
-            // intake.move(127);
-            // chassis.moveToPoint(0, 10, 1000);
-            // chassis.turnToHeading(-90, 750);
             chassis.waitUntilDone();
             chassis.turnToHeading(0, 1000);
             chassis.waitUntilDone();
@@ -318,43 +298,6 @@ void autonomous() {
             chassis.waitUntilDone();
             pistonLift.set_value(false);
             chassis.moveToPoint(0, 42, 1000, {.forwards = false}); //p1
-            break;
-
-
-
-            // chassis.setPose(0, 0, 0);
-            // chassis.moveToPoint(0, -28, 2000, {.forwards=false}); //p1
-            // chassis.turnToHeading(333, 300);
-            // chassis.moveToPoint(7.8, -44, 1000, {.forwards=false, .maxSpeed = 80}); //p2
-            // chassis.waitUntilDone();
-            // clamp.set_value(true);
-            // pros::delay(100);
-            // intake.move(-127);
-            // pros::delay(200);
-            // chassis.moveToPoint(20, -27, 1000, {.forwards=true, .maxSpeed = 80}); //p3
-            // chassis.waitUntilDone();
-            // pros::delay(700);
-            // clamp.set_value(false);
-            // intake.move(127);
-            // chassis.moveToPoint(44.612, -35.767, 1500, {.forwards=false}); //p4
-            // chassis.waitUntilDone();
-            // clamp.set_value(true);
-            // pros::delay(100);
-            // pistonLift.set_value(true);
-            // intake.move(-127);
-            // chassis.moveToPoint(75, -10, 1800, {.forwards=true, .maxSpeed=70});
-            // chassis.waitUntilDone();
-            // pistonLift.set_value(false);
-            // intake.move(-127);
-            // pros::delay(250);
-            // chassis.turnToHeading(30, 500);
-            // chassis.moveToPoint(60, -8.25, 1500, {.forwards=false, .maxSpeed = 60});
-            // pros::delay(500);
-            // intake.move(-127);
-            // chassis.moveToPoint(60.581, -27.499, 1500, {.forwards=true, .maxSpeed = 70});
-            // intake.move(127);
-            // pros::delay(75);
-            // intake.move(-127);
             break;
         case 2: //redpos
             chassis.setPose(0, 0, 0);
@@ -388,29 +331,6 @@ void autonomous() {
             chassis.setPose(0, 0, 0);
             chassis.moveToPoint(0, 18, 6000, {.forwards=true, .maxSpeed = 40}); //p1
 
-
-
-
-
-            // chassis.moveToPoint(0, -1, 1500, {.maxSpeed = 10});
-            // intake.move(-127);
-            // pros::delay(1000);
-            // chassis.moveToPoint(0, 9, 1500, {.minSpeed = 10});
-            // chassis.turnToHeading(270, 750);
-            // chassis.moveToPoint(15, 7, 1500, {.forwards = false, .maxSpeed = 50});
-            // chassis.waitUntilDone();
-            // pros::delay(100);
-            // clamp.set_value(true);
-            // pros::delay(400);
-            // chassis.moveToPoint(20, 28, 1500, {.forwards = true, .minSpeed = 20});
-            // chassis.moveToPoint(30, 40, 1500, {.forwards = true, .minSpeed = 70});
-            // chassis.moveToPoint(40, 80, 2000, {.forwards = true});
-            // pros::delay(800);
-            // chassis.moveToPoint(48, 55, 1500, {.forwards = true});
-            // pros::Task task{[] {
-            //     arm_move_load();
-            // }};
-            // chassis.moveToPoint(35, 62, 1500, {.forwards = false});
             break;
         case 3: //bluepos
             chassis.setPose(0, 0, 0);
@@ -432,9 +352,6 @@ void autonomous() {
             chassis.setPose(0, 0, 0);
             chassis.moveToPoint(0, 55, 6000, {.forwards=true, .maxSpeed = 45}); //p1
             chassis.waitUntilDone();
-            // pros::delay(1000);
-            // pistonLift.set_value(false);
-            // chassis.moveToPoint(0, 52, 1000, {.forwards=true, .maxSpeed = 70}); //p1
             pros::delay(500);
             chassis.moveToPoint(0, 40, 1000, {.forwards=false, .maxSpeed = 50}); //p1
             chassis.waitUntilDone();
@@ -445,28 +362,6 @@ void autonomous() {
             chassis.moveToPoint(0, 18, 6000, {.forwards=true, .maxSpeed = 40}); //p1
 
 
-
-
-
-            // chassis.moveToPoint(0, -1, 1500, {.maxSpeed = 10});
-            // intake.move(-127);
-            // pros::delay(1000);
-            // chassis.moveToPoint(0, 9, 1500, {.minSpeed = 10});
-            // chassis.turnToHeading(270, 750);
-            // chassis.moveToPoint(15, 7, 1500, {.forwards = false, .maxSpeed = 50});
-            // chassis.waitUntilDone();
-            // pros::delay(100);
-            // clamp.set_value(true);
-            // pros::delay(400);
-            // chassis.moveToPoint(20, 28, 1500, {.forwards = true, .minSpeed = 20});
-            // chassis.moveToPoint(30, 40, 1500, {.forwards = true, .minSpeed = 70});
-            // chassis.moveToPoint(40, 80, 2000, {.forwards = true});
-            // pros::delay(800);
-            // chassis.moveToPoint(48, 55, 1500, {.forwards = true});
-            // pros::Task task{[] {
-            //     arm_move_load();
-            // }};
-            // chassis.moveToPoint(35, 62, 1500, {.forwards = false});
             break;
         case 4: //rednegwin
             chassis.setPose(0, 0, 0);
@@ -653,7 +548,7 @@ void autonomous() {
             clamp.set_value(true); //clamp mogo
             pros::delay(200);
             chassis.moveToPoint(2, -27, 1300, {.minSpeed = 20}); //ring 1
-            chassis.moveToPoint(-37.9, -55, 2000, {.maxSpeed = 90}); //ring 2
+            chassis.moveToPoint(-37.9, -55, 2000, {.maxSpeed = 75}); //ring 2
             chassis.moveToPoint(-28, -57, 1700, {.forwards = false});
             chassis.turnToHeading(0, 800);
             chassis.moveToPoint(-28, 6, 3300, {.maxSpeed = 40}); //ring 3, 4, and 5
@@ -696,18 +591,23 @@ void autonomous() {
 
             break;
 
-        case 8: // 10/28 matchauto red negative side
-            chassis.setPose(0,0,0);
-            chassis.moveToPoint(0, -30, 1000, {.forwards = false}); //mogo 1
-            chassis.waitUntilDone();
-            clamp.set_value(true);
-            pros::delay(100);
-            intake.move(-127); //spins intake to score ring 1 (preload)
-            chassis.turnToHeading(90, 800);
-            chassis.moveToPoint(28.5, -30, 1000); //ring 2
-            chassis.turnToHeading(180, 800);
-            chassis.moveToPoint(28.5, -50, 1000); //ring 3
-            chassis.moveToPoint(28.5, -30, 1000, {.forwards = false});
+        case 8: //skills 3.0
+            //QUADRANT 1
+                chassis.setPose(0, 0, 0);
+                nextState(); //state 1
+                nextState(); //state 2
+                nextState(); //state 3
+                pros::delay(600);
+                nextState();
+                chassis.moveToPoint(0, -3, 500, {.forwards = false, .minSpeed = 40});
+                chassis.moveToPoint(26, -5, 1900, {.forwards = false, .maxSpeed = 60}); //moves to mogo 1
+                chassis.waitUntilDone();
+                pros::delay(100);
+                clamp.set_value(true); //picks up mogo 1
+                pros::delay(500);
+                intake.move(-127);
+                chassis.moveToPoint(28, -30, 1700, {.maxSpeed = 90}); //ring 1
+                //chassis.moveToPoint(70, -70, 1500); //ring 2
             break;
 
         case 9: // 10/11 matchauto red negative side
@@ -773,26 +673,20 @@ void opcontrol() {
         
 
         //move ladybrown mech
-        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)){
-            ladybrown.move(-127);
-        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_UP)){
-			ladybrown.move(127);
-        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)){
-			ladybrown.move(127);
-        } else{
-            ladybrown.move(0);
+        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)){
+            nextState();
         }
-
-
-        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)){
-            pros::Task task{[] {
-                arm_move_load();
-            }};
-        }
+        /*if(color.get_hue()>200){
+            pros::Task task{[]{
+                color_sort();
+            }}
+        }*/
+        
 
 
 
         //move intake (NOT TOGGLE | MUST HOLD)
+        
         if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)){
 			intake.move(-127);
         } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)){
@@ -815,10 +709,10 @@ void opcontrol() {
         //piston lift controls
         if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)){
 		    if(B_pressed){
-                pistonLift.set_value(false);
+                ringrush.set_value(false);
                 B_pressed = false;
             } else{
-                pistonLift.set_value(true);
+                ringrush.set_value(true);
                 B_pressed = true;
             }
 		}
