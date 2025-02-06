@@ -133,7 +133,7 @@ void state360(){
 }
 
 void liftControl(){
-    double kp = 3.75;
+    double kp = 2.75;
     double error = target - (wallrotational.get_position()/100.0);
     if ((wallrotational.get_position()/100.0) > 350) {
        error = (360 + target) - (wallrotational.get_position()/100.0); 
@@ -227,8 +227,8 @@ void colorSortAuton(){
         else if (intakespin == true && macropeck == true && isextake == false) {
             intake.move(-127);
             if (intake.get_actual_velocity() == 0) {
-                intake.move(127);
-                pros::delay(5);
+                // intake.move(127);
+                // pros::delay(25);
                 intake.move(-127);
             }
         }
@@ -410,7 +410,7 @@ void autonomous() {
             intakespin = false;
             chassis.moveToPoint(0, 13, 750);
             chassis.turnToHeading(90, 750);
-            chassis.moveToPoint(-25, 17, 1250, {.forwards = false, .maxSpeed = 80});
+            chassis.moveToPoint(-25, 16, 1250, {.forwards = false, .maxSpeed = 80});
             chassis.waitUntilDone();
             //clamp first mogo
             clamp.set_value(false);
@@ -424,24 +424,31 @@ void autonomous() {
             chassis.turnToHeading(355, 500);
             chassis.moveToPoint(-46, 86, 900); //ring 2
             chassis.waitUntilDone(); 
-            chassis.moveToPoint(-39, 61, 1000, {.forwards = false}); //ring 3 68.5
+            chassis.moveToPoint(-42, 66, 1000, {.forwards = false}); //ring 3 68.5
+            chassis.waitUntilDone();
+            nextState();
+            chassis.turnToHeading(271.5, 750);
             chassis.waitUntilDone();
             macropeck = true;
-            nextState();
-            chassis.turnToHeading(268, 750);
-            chassis.moveToPoint(-58, 64.5, 1000, {.maxSpeed = 67});
+            chassis.waitUntilDone();
+
+            chassis.moveToPoint(-61, 68.5, 1000, {.maxSpeed = 57});
             chassis.waitUntilDone();
             pros::delay(700); //removable
             intakespin = false;
             isextake = true;
-            pros::delay(70);
+            pros::delay(40);
             isextake = false;
             nextState();
             intake.set_brake_mode(pros::MotorBrake::coast);
             pros::delay(10);
+            chassis.turnToHeading(275, 500);
             chassis.waitUntilDone();
             nextState();
             pros::delay(800);
+            chassis.turnToHeading(270, 500);
+            chassis.turnToHeading(275, 500);
+            chassis.moveToPoint(-64, 64, 300);
             
             // right_motor_group.move(-50);
             // left_motor_group.move(-50);
@@ -462,10 +469,10 @@ void autonomous() {
             intakespin = true;
             nextState();
             chassis.waitUntilDone();
-            chassis.moveToPoint(-47, 66, 1000, {.forwards = false});
+            chassis.moveToPoint(-49, 66, 1000, {.forwards = false});
             chassis.turnToHeading(181, 700);
-            chassis.moveToPoint(-48, 12, 2000, {.maxSpeed = 80});
-            chassis.moveToPoint(-48, 16, 1000, {.forwards = false});
+            chassis.moveToPoint(-53, 12, 2000, {.maxSpeed = 80});
+            chassis.moveToPoint(-51, 16, 1000, {.forwards = false});
             chassis.turnToHeading(270, 1000);
             chassis.moveToPoint(-59, 20, 1000);
             chassis.moveToPoint(-50, 20, 1000, {.forwards = false});
@@ -485,8 +492,9 @@ void autonomous() {
             intakespin = true;
             chassis.moveToPoint(-50, 15, 1000);
             chassis.turnToHeading(270,1000);
-            chassis.moveToPoint(0, 15, 3000,{.forwards = false, .minSpeed = 20});
-            chassis.moveToPoint(15, 15, 1500,{.forwards = false, .maxSpeed = 80});
+            chassis.moveToPoint(0, 20, 3000,{.forwards = false, .minSpeed = 20});
+            chassis.turnToHeading(270, 300);
+            chassis.moveToPoint(20, 20, 1500,{.forwards = false, .maxSpeed = 80});
             chassis.waitUntilDone();
             intakespin = false;
             pros::delay(100);
@@ -501,36 +509,41 @@ void autonomous() {
             intakespin = true;
             //time short start
             chassis.turnToHeading(359,1000);
-            chassis.moveToPoint(15,40,1000);
+            chassis.moveToPoint(22,37,1000);
             chassis.turnToHeading(80, 900);
             chassis.waitUntilDone();
-            chassis.moveToPoint(23,50,1000);
+            chassis.moveToPoint(27,50,1000);
             chassis.turnToHeading(8, 500);
-            chassis.moveToPoint(38, 86, 900);
-            chassis.moveToPoint(29, 59, 900, {.forwards = false});
+            chassis.moveToPoint(40, 88, 130);
+            chassis.moveToPoint(37, 69, 900, {.forwards = false});
             chassis.waitUntilDone();
-            nextState();
-            macropeck = true;
             chassis.turnToHeading(90, 900);
-            chassis.moveToPoint(45, 62.5, 800, {.maxSpeed = 67});
             chassis.waitUntilDone();
-            pros::delay(700);
+            macropeck = true;
+            nextState();
+            chassis.moveToPoint(52, 70, 800, {.maxSpeed = 57});
+            chassis.waitUntilDone();
+            pros::delay(800);
             intakespin = false;
             isextake = true;
-            pros::delay(70);
+            pros::delay(40);
             isextake = false;
             nextState();
-            chassis.turnToHeading(90, 500);
+            chassis.turnToHeading(91, 500);
             chassis.waitUntilDone();
             nextState();
-            pros::delay(800);
+            pros::delay(700);
+            chassis.turnToHeading(85, 400);
+            chassis.turnToHeading(91, 400);
+            chassis.waitUntilDone();
             nextState();
             intakespin = true;
-            chassis.moveToPoint(35, 62.5, 700, {.forwards = false});
+            macropeck = false;
+            chassis.moveToPoint(35, 66.5, 700, {.forwards = false});
             chassis.turnToHeading(180, 500);
-            chassis.moveToPoint(35, 7, 1500, {.maxSpeed = 80});
-            chassis.moveToPoint(35, 14, 800, {.forwards = false});
-            chassis.moveToPoint(48, 18, 800);
+            chassis.moveToPoint(38, 7, 1500, {.maxSpeed = 80});
+            chassis.moveToPoint(38, 14, 800, {.forwards = false});
+            chassis.moveToPoint(50, 18, 1000);
             chassis.turnToHeading(90, 500);
             chassis.moveToPoint(39, 18, 800, {.forwards = false});
             chassis.turnToHeading(55, 700);
@@ -555,15 +568,15 @@ void autonomous() {
             pros::delay(200);
             intakespin = true;
             runfrontstage = false;
-            chassis.moveToPoint(-65, 88, 1700);
+            chassis.moveToPoint(-64, 90, 1700);
             chassis.turnToHeading(0,1000);
-            chassis.moveToPoint(-66, 102, 1000);
+            chassis.moveToPoint(-64, 108, 1000);
             chassis.turnToHeading(45, 500);
-            chassis.moveToPoint(-60, 116, 1000);
+            chassis.moveToPoint(-60, 127, 1000);
             chassis.turnToHeading(325, 700);
             // chassis.turnToHeading(175, 500);
             // chassis.moveToPoint(-55, 100, 1000);
-            chassis.moveToPoint(-67, 128, 1000,{.forwards = false});
+            chassis.moveToPoint(-75, 136, 1000,{.forwards = false});
             chassis.waitUntilDone();
             clamp.set_value(true);
             //release last mogo
