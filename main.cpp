@@ -34,7 +34,7 @@ pros::Rotation wallrotational(19);
 // horizontal tracking wheel
 //lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, lemlib::Omniwheel::NEW_2, -0.5);
 // vertical tracking wheel
-lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, lemlib::Omniwheel::NEW_275, 1.8);
+lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, lemlib::Omniwheel::NEW_2, 1.8);
 lemlib::TrackingWheel vertical_tracking_wheel(&verticalEnc, lemlib::Omniwheel::NEW_275, -1.5);
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 pros::Optical color(12);
@@ -59,7 +59,7 @@ lemlib::Drivetrain drivetrain(&left_motor_group, // left motor group
                               11.3125, // 10 inch track width
                               lemlib::Omniwheel::NEW_325, // using new 3.25" omnis
                               480, // drivetrain rpm is 360
-                              0 // horizontal drift is 0. If we had traction wheels, it would have been 8
+                              2 // horizontal drift is 0. If we had traction wheels, it would have been 8
 );
 
 lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel 1, set to null
@@ -69,27 +69,27 @@ lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel
                             &imu // inertial sensor
 );
 
-lemlib::ControllerSettings lateral_controller(5.45, // proportional gain (kP) 6.9
+lemlib::ControllerSettings lateral_controller(5.55, // proportional gain (kP) 6.9
                                               0.05, // integral gain (kI) 0.02
                                               20, // derivative gain (kD) 8
-                                              3, // anti windup
+                                              7, // anti windup
                                               1, // small error range, in inches
                                               1400, // small error range timeout, in milliseconds
-                                              5, // large error range, in inches
+                                              0, // large error range, in inches
                                               700, // large error range timeout, in milliseconds
-                                              30 // maximum acceleration (slew
+                                              80 // maximum acceleration (slew
 );
 
 // angular PID controller
-lemlib::ControllerSettings angular_controller(2.5, // proportional gain (kP) 2.5
+lemlib::ControllerSettings angular_controller(3, // proportional gain (kP) 2.5
                                               0, // integral gain (kI)
                                               20, // derivative gain (kD)
-                                              3, // anti windup
+                                              10, // anti windup
                                               1, // small error range, in inches
                                               100, // small error range timeout, in milliseconds
                                               5, // large error range, in inches
                                               500, // large error range timeout, in milliseconds
-                                              70 // maximum acceleration (slew)
+                                              80 // maximum acceleration (slew)
 );
 
 // input curve for throttle input during driver control
@@ -113,8 +113,8 @@ lemlib::Chassis chassis(drivetrain, // drivetrain settings
                         &steer_curve
 );
 
-const int numstates = 3;
-int states[numstates] = {0, 25, 155};
+const int numstates = 4;
+int states[numstates] = {0, 15, 25, 130};
 int currstate = 0;
 int target = 0;
 
@@ -150,6 +150,9 @@ void liftControl(){
     //     intake.move(velocity);
     // }
     ladybrown.move(velocity);
+    if(abs(error) > 10){
+    intake.move(velocity);
+    }
 }
 
 void easyLoad(){
@@ -286,7 +289,7 @@ void on_center_button() {
 }
 
 int current_auton_selection = -1; // Initialize to an invalid value
-const int numcases = 7;
+const int numcases = 8;
 
 const char* auton_names[numcases + 1] = {
     "redneg",
@@ -296,7 +299,8 @@ const char* auton_names[numcases + 1] = {
     "bluepos",
     "SAWPred",
     "47skills",
-    "SAWPblue"
+    "SAWPblue",
+    "Testing"
 };
 
 // Function to update the selected autonomous mode efficiently
@@ -941,7 +945,13 @@ void autonomous() {
             nextState();
             nextState();
             break;
+        case 8: //testing
+            chassis.setPose(0, 0, 0);
+            chassis.turnToHeading(90, 1200);
+            break;
     }
+
+
 
 
 }
