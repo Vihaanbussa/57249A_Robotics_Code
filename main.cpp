@@ -18,70 +18,65 @@
 
 pros::MotorGroup left_motor_group({-2, -3, -4}); // left motors on ports 1 (reversed), 2 (forwards), and 3 (reversed)
 pros::MotorGroup right_motor_group({16, 15, 14}); // right motors on ports 4 (forwards), 5 (reversed), and 6 (forwards)
-pros::Motor ladybrown(5);
-pros::MotorGroup intake({-20, 10});
-pros::Motor frontstage(10);
-pros::Motor hooks(-20);
-pros::adi::DigitalOut clamp('E');
-pros::adi::DigitalOut doink('C');
-pros::adi::DigitalOut pistonLift('B');
-pros::Imu imu(17);
-// horizontal tracking wheel encoder. Rotation sensor, port 20, not reversedx
-pros::Rotation horizontalEnc(13);
-// vertical tracking wheel encoder. Rotation sensor, port 11, reversed
-pros::Rotation verticalEnc(-18);
-pros::Rotation wallrotational(19);
-// horizontal tracking wheel
-//lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, lemlib::Omniwheel::NEW_2, -0.5);
-// vertical tracking wheel
-lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, lemlib::Omniwheel::NEW_2, 1.8);
-lemlib::TrackingWheel vertical_tracking_wheel(&verticalEnc, lemlib::Omniwheel::NEW_275, -1.5);
-pros::Controller controller(pros::E_CONTROLLER_MASTER);
-pros::Optical color(12);
-pros::adi::AnalogIn potentiometer ('A');
+pros::Motor ladybrown(5); //wallstake mech
+pros::MotorGroup intake({-20, 10}); //disk grabber combined
+pros::Motor frontstage(10); //disk grabber pt 1
+pros::Motor hooks(-20); //disk grabber pt 2
+pros::adi::DigitalOut clamp('E'); //clamp for mobile goal
+pros::adi::DigitalOut doink('C'); //front side mobile goal grabber
+pros::Imu imu(17); //Intertial Sensor for PID
+pros::Rotation horizontalEnc(13); // horizontal tracking wheel encoder. Rotation sensor, port 13, not reversed
+pros::Rotation verticalEnc(-18); // vertical tracking wheel encoder. Rotation sensor, port 18, reversed
+pros::Rotation wallrotational(19); //rotational sensor for Wall stake PID
+lemlib::TrackingWheel horizontal_tracking_wheel(&horizontalEnc, lemlib::Omniwheel::NEW_2, -0.5); // horizontal tracking wheel for odometry
+lemlib::TrackingWheel vertical_tracking_wheel(&verticalEnc, lemlib::Omniwheel::NEW_275, -1.5); // vertical tracking wheel for odometry
+pros::Controller controller(pros::E_CONTROLLER_MASTER); //controller
+pros::Optical color(12); //color sensor for automatic color sorting
+pros::adi::AnalogIn potentiometer ('A'); //potentiometer for color sorting
 
 
-
+//these are all starting booleans
 bool clampbool = LOW;
 bool pistonliftbool = LOW;
-//bool doink = LOW;
 bool R2_pressed = false;
 bool A_pressed = false;
-bool alliancecolor = false; //true = red alliance
+bool alliancecolor = false; //true = red alliance, false = blue alliance
 
 
 
 
 
-// drivetrain setting
+// drivetrain settings
 lemlib::Drivetrain drivetrain(&left_motor_group, // left motor group
                               &right_motor_group, // right motor group
-                              11.3125, // 10 inch track width
+                              11.3125, // 11.3 inch track width
                               lemlib::Omniwheel::NEW_325, // using new 3.25" omnis
-                              480, // drivetrain rpm is 360
-                              2 // horizontal drift is 0. If we had traction wheels, it would have been 8
+                              480, // drivetrain rpm is 480
+                              2 // horizontal drift
 );
 
+// Odometry sensors setup
 lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel 1, set to null
-                            nullptr, // vertical tracking wheel 2, set to nullptr as we are using IMEs
+                            nullptr, // vertical tracking wheel 2, set to nullptr as we are using Inertial instead of 2nd tracking wheel
                             &horizontal_tracking_wheel, // horizontal tracking wheel 1
                             nullptr, // horizontal tracking wheel 2, set to nullptr as we don't have a second one
                             &imu // inertial sensor
 );
 
-lemlib::ControllerSettings lateral_controller(5.55, // proportional gain (kP) 6.9
-                                              0.05, // integral gain (kI) 0.02
-                                              20, // derivative gain (kD) 8
+//Lateral PID controller
+lemlib::ControllerSettings lateral_controller(5.55, // proportional gain (kP)
+                                              0.05, // integral gain (kI)
+                                              20, // derivative gain (kD)
                                               7, // anti windup
                                               1, // small error range, in inches
                                               1400, // small error range timeout, in milliseconds
-                                              0, // large error range, in inches
+                                              4, // large error range, in inches
                                               700, // large error range timeout, in milliseconds
-                                              80 // maximum acceleration (slew
+                                              80 // maximum acceleration (slew)
 );
 
 // angular PID controller
-lemlib::ControllerSettings angular_controller(3, // proportional gain (kP) 2.5
+lemlib::ControllerSettings angular_controller(3, // proportional gain (kP)
                                               0, // integral gain (kI)
                                               20, // derivative gain (kD)
                                               10, // anti windup
@@ -92,19 +87,8 @@ lemlib::ControllerSettings angular_controller(3, // proportional gain (kP) 2.5
                                               80 // maximum acceleration (slew)
 );
 
-// input curve for throttle input during driver control
-lemlib::ExpoDriveCurve throttle_curve(3, // joystick deadband out of 127
-                                     10, // minimum output where drivetrain will move out of 127 
-                                     1.019 // expo curve gain
-);
 
-// input curve for steer input during driver control
-lemlib::ExpoDriveCurve steer_curve(3, // joystick deadband out of 127
-                                  10, // minimum output where drivetrain will move out of 127
-                                  1.019 // expo curve gain
-);
-
-// create the chassis
+// creates the chassis
 lemlib::Chassis chassis(drivetrain, // drivetrain settings
                         lateral_controller, //  lateral PID settings
                         angular_controller, // angular PID settings
@@ -113,19 +97,22 @@ lemlib::Chassis chassis(drivetrain, // drivetrain settings
                         &steer_curve
 );
 
+//Starting values for the wallstake scoring mechanism
 const int numstates = 4;
-int states[numstates] = {0, 15, 25, 130};
+int states[numstates] = {0, 15, 25, 130}; //[0] = default; [1] = put ring in wallstake mech; [2] = put 2nd ring in wallstake mech; [3] = score
 int currstate = 0;
 int target = 0;
+bool bool360 = true;
 
-void nextState(){ //macro to score
+void nextState(){ //macro to score and change states
     currstate += 1;
     if(currstate == numstates){
         currstate = 0;
     }
     target = states[currstate];
 }
-bool bool360 = true;
+
+//macro to automatically move wallstake to "360" position (used to score on alliance stakes & tip mobile goals)
 void state360(){
     if(bool360){
         target = 230;
@@ -138,6 +125,7 @@ void state360(){
     }
 }
 
+//PID for the wallstake mechanism to ensure its at correct position
 void liftControl(){
     ladybrown.set_brake_mode(pros::MotorBrake::hold);
     double kp = 1.5;
@@ -146,33 +134,20 @@ void liftControl(){
        error = (360 + target) - (wallrotational.get_position()/100.0); 
     }
     double velocity = kp*error;
-    // if(abs(error) > 10){
-    //     intake.move(velocity);
-    // }
     ladybrown.move(velocity);
     if(abs(error) > 10){
     intake.move(velocity);
     }
 }
 
-void easyLoad(){
-    nextState();
-    pros::delay(700);
-    nextState();
-    nextState();
-    intake.move(-127);
-    pros::delay(1000);
-    nextState();
-    pros::delay(700);
-    nextState();
-}
-
+//other booleans for autons
 bool intakespin = false;
 bool runintakejam = true;
 bool runfrontstage = false;
 bool macropeck = false;
 bool isextake = false;
 
+//intake unjam function I created as the hooks on our intake would get caught on top of mobile goal, so I created this to quickly release hook and than continue spinning intake
 void intakeunjam() {
     if (intakespin == true) {
         intake.move(-127);
@@ -199,9 +174,9 @@ void intakeunjam() {
             intake.move(-127);
         }
     } 
-} //not used
+} //not used 
 
-
+//intake unjam and color sort for incorrect rings (will stop the intake if color is wrong so that wrong color ring flies out of intake
 void colorSortAuton(){
     if (pros::competition::is_autonomous()){
         intake.set_brake_mode(pros::MotorBrake::hold);
@@ -253,44 +228,18 @@ void colorSortAuton(){
 }
 
 
-void colorSortforRobot(){
-    intake.set_brake_mode(pros::MotorBrake::hold);
-    //alliance color true = red and false = blue
-    if (alliancecolor == true && color.get_hue() >= 180 && color.get_hue() <= 240) {
-        pros::lcd::print(6, "blue ring detected");
-        intake.move(0);
-        pros::delay(200);
-        intake.move(-127);
-    }
-    else if (alliancecolor == false && (color.get_hue() <= 40 || color.get_hue() >= 350)) {
-        pros::lcd::print(6, "red ring detected");
-        intake.move(0);
-        pros::delay(200);
-        intake.move(-127);
-    }
-    else if (1) {
-        intake.move(-127);
-    }
-
-} 
-
-//not used
 
 
 
-
-/**
- * A callback function for LLEMU's center button.
- *
- * When this callback is fired, it will toggle line 2 of the LCD text between
- * "I was pressed!" and nothing.
- */
+//use this if i want to click center button of brain
 void on_center_button() {
 }
 
+//auton selector values
 int current_auton_selection = -1; // Initialize to an invalid value
 const int numcases = 8;
 
+//all of our auton cases
 const char* auton_names[numcases + 1] = {
     "redneg",
     "skills",
@@ -303,7 +252,7 @@ const char* auton_names[numcases + 1] = {
     "Testing"
 };
 
-// Function to update the selected autonomous mode efficiently
+// Function to read the potentiometer value to autoselect our auton
 void update_auton_selector() {
     int pot_value = potentiometer.get_value(); // Read potentiometer value (10-4095)
 
@@ -324,17 +273,12 @@ void update_auton_selector() {
     pros::lcd::clear_line(4);
     pros::lcd::print(4, "Auton: %s", auton_names[current_auton_selection]);
 
-    // Overwrite previous text properly on the controller without flickering
+    // Overwrite previous text properly on the controller
     controller.print(0, 0, "Auton: %-10s", auton_names[current_auton_selection]); // Ensures old text is overwritten
 }
 
 
-/**
- * Runs initialization code. This occurs as soon as the program is started.
- *
- * All other competition modes are blocked by initialize; it is recommended
- * to keep execution time for this mode under a few seconds.
- */
+//initializes the brain
 void initialize() {
     pros::lcd::initialize(); // initialize brain screen
     chassis.calibrate(); // calibrate sensors
@@ -370,61 +314,50 @@ void disabled() {
  */
 void competition_initialize() {}
 
-/**
- * Runs the user autonomous code. This function will be started in its own task
- * with the default priority and stack size whenever the robot is enabled via
- * the Field Management System or the VEX Competition Switch in the autonomous
- * mode. Alternatively, this function may be called in initialize or opcontrol
- * for non-competition testing purposes.
- *
- * If the robot is disabled or communications is los
- |t, the autonomous task
- * will be stopped. Re-enabling the robot will restart the task, not re-start it
- * from where it left off.
- */ 
 
+//This is our autonomous routes
 void autonomous() {
-    clamp.set_value(true);
+    clamp.set_value(true); //auto sets clamp to down
+
+	//constantly runs colorsort/intakeunjam function
     pros::Task autotask([]{
         while(true) {
             colorSortAuton();
-            // intakeunjam();
             pros::delay(5);
         }
     });
     switch(current_auton_selection){
         case 0: //red negative
             alliancecolor = true;
-            chassis.setPose(0, 0, 320);
-            chassis.moveToPoint(-8.5, 10, 2000,{.maxSpeed = 80});
+            chassis.setPose(0, 0, 320); //set starting position
+            chassis.moveToPoint(-8.5, 10, 2000,{.maxSpeed = 80}); //moves to alliance wall stake
             chassis.waitUntilDone();
             nextState();
             nextState();
             pros::delay(750);
-            nextState();
+            nextState(); //scored ring on wallstake using wallstake mech
             chassis.turnToHeading(315, 500);
-            chassis.moveToPoint(7, -10, 750, {.forwards = false, .maxSpeed = 75});
-            chassis.moveToPoint(7, -25, 500, {.forwards = false, .maxSpeed = 75});
+            chassis.moveToPoint(7, -10, 750, {.forwards = false, .maxSpeed = 75}); 
+            chassis.moveToPoint(7, -25, 500, {.forwards = false, .maxSpeed = 75}); //move to mobile goal
             chassis.waitUntilDone();
             pros::delay(250);
-            clamp.set_value(false);
+            clamp.set_value(false); //grabs clamp
             chassis.turnToHeading(130, 1000);
             chassis.waitUntilDone();
-            intakespin = true;
-            chassis.moveToPoint(18, -32, 1500);
+            intakespin = true; //starts spinning intake
+            chassis.moveToPoint(18, -32, 1500); //grab ring one
 
-            // chassis.moveToPoint(12, -22, 1000,{.forwards = false});
             chassis.turnToHeading(109, 750);
-            chassis.moveToPoint(27, -35, 2000);
+            chassis.moveToPoint(27, -35, 2000); //grab ring 2
 
             chassis.moveToPoint(7, -17, 1250, {.forwards = false});
             chassis.turnToHeading(90, 750);
-            chassis.moveToPoint(26, -19, 1500);
+            chassis.moveToPoint(26, -19, 1500); //grab ring 3
             chassis.turnToHeading(270, 750);
-            chassis.moveToPoint(0, -19, 800);
+            chassis.moveToPoint(0, -19, 800); //move to ladder
             chassis.waitUntilDone();
             nextState();
-            nextState();
+            nextState(); //uses wallstake mech to touch the ladder for auton win point
             break;
         case 1: //Skills
             alliancecolor = true;
@@ -956,22 +889,8 @@ void autonomous() {
 
 }
 
-/**
- * Runs the operator control code. This function will be started in its own task
- * with the default priority and stack size whenever the robot is enabled via
- * the Field Management System or the VEX Competition Switch in the operator
- * control mode.
- *
- * If no competition control is connected, this function will run immediately
- * following initialize().
- *
- * If the robot is disabled or communications is lost, the
- * operator control task will be stopped. Re-enabling the robot will restart the
- * task, not resume it from where it left off.
- */
+//runs in driver control period
 void opcontrol() {
-    // state360();
-    // clamp.set_value(true);
 
     while (true) {
         
@@ -991,11 +910,12 @@ void opcontrol() {
         if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)){
             nextState();
         }
-        /*if(color.get_hue()>200){
+		//runs color sort function
+        if(color.get_hue()>200){
             pros::Task task{[]{
                 color_sort();
             }}
-        }*/
+        }
         
 
 
@@ -1022,21 +942,9 @@ void opcontrol() {
             }
 		}
 
-        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)){
-		    chassis.setPose(0, 0, 0);
-            chassis.moveToPoint(0, 50, 1500);
-		}
-
-        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)){
-            chassis.moveToPoint(0, 0, 1500, {.forwards = false});
-		}
-
-        if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)){
-		    chassis.setPose(0, 0, 0);
-            chassis.turnToHeading(90, 1500);
-		}
         
-        //piston lift controls
+        
+        //doinker control (front side mobile goal grabber)
         if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)){
 		    if(A_pressed){
                 doink.set_value(false);
@@ -1047,17 +955,15 @@ void opcontrol() {
             }
 		}
 
+		//auto go to 360
         if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)){
             state360();
         }
         
-         if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_X)){
-            pros::Task autoLoad{[] {
-                easyLoad();
-            }};
-        }
 
         // BOT MOVEMENT!!!!!!!
+		//Custom function I made so that the bot omves exponentially as joystick value increases, allows for a smoother driving experience & better drfiting
+		//is based on the x^3/10000 function, where x axis is joystick input and y axis is power output
 
         double ctrX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X); 
         double ctrY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
